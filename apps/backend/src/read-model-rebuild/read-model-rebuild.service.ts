@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, In, IsNull, MoreThan } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
+import { DataProcessingClient } from '../data-processing/data-processing.client';
 import { firstValueFrom } from 'rxjs';
 import { isAxiosError } from 'axios';
 import {
@@ -23,8 +23,11 @@ import {
 import { JobLockService } from '../scheduler/job-lock.service';
 import { JobHistoryService } from '../scheduler/job-history.service';
 import { AdminAuditService } from '../admin-audit/admin-audit.service';
-import { ConfigService } from '@nestjs/config';
-import { config } from '../lib/config';
+import {
+  CORRELATION_ID_HEADER,
+  REQUEST_ID_HEADER,
+} from '../common/constants/request.constants';
+import { RequestContextService } from '../common/services/request-context.service';
 
 interface RebuildResultResponse {
   totalItems?: number;
@@ -59,8 +62,6 @@ function getErrorDetails(error: unknown): ErrorDetails {
 export class ReadModelRebuildService {
   private readonly logger = new Logger(ReadModelRebuildService.name);
   private readonly REBUILD_VERSION = '1.0.0';
-  private readonly pythonApiUrl: string;
-  private readonly pythonApiKey: string;
 
   // Mapping of datasets to their data-processing endpoints
   private readonly datasetEndpoints: Record<RebuildDataset, string> = {
@@ -74,19 +75,11 @@ export class ReadModelRebuildService {
   constructor(
     @InjectRepository(ReadModelRebuildJob)
     private readonly jobRepo: Repository<ReadModelRebuildJob>,
-    private readonly httpService: HttpService,
+    private readonly httpService: DataProcessingClient,
     private readonly jobLockService: JobLockService,
     private readonly jobHistoryService: JobHistoryService,
     private readonly adminAuditService: AdminAuditService,
-    private readonly configService: ConfigService,
-  ) {
-    this.pythonApiUrl =
-      this.configService.get<string>('PYTHON_API_URL') || config.python.apiUrl;
-    this.pythonApiKey =
-      this.configService.get<string>('PYTHON_API_KEY') ||
-      config.python.apiKey ||
-      '';
-  }
+  ) {}
 
   /**
    * Trigger a rebuild for a specific dataset or contract domain
@@ -245,7 +238,7 @@ export class ReadModelRebuildService {
       }
 
       // Call data-processing service
-      const url = `${this.pythonApiUrl}${endpoint}`;
+      const url = endpoint;
 
       // Update progress
       job.progressDetails = {
@@ -257,11 +250,16 @@ export class ReadModelRebuildService {
 
       this.logger.log(`Calling data-processing: ${url}`);
 
+      const correlationId =
+        RequestContextService.getCorrelationId() !== 'unknown'
+          ? RequestContextService.getCorrelationId()
+          : `rebuild-${job.id}`;
+
       const response = await firstValueFrom(
         this.httpService.post<RebuildResultResponse>(url, payload, {
           headers: {
-            ...(this.pythonApiKey ? { 'X-API-Key': this.pythonApiKey } : {}),
-            'X-Correlation-ID': `rebuild-${job.id}`,
+            [CORRELATION_ID_HEADER]: correlationId,
+            [REQUEST_ID_HEADER]: correlationId,
           },
           timeout: 300000, // 5 minutes
         }),

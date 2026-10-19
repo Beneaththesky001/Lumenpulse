@@ -12,30 +12,25 @@ describe('IdempotencyService', () => {
   let repo: jest.Mocked<
     Pick<
       Repository<IdempotencyRecord>,
-      | 'findOne'
-      | 'create'
-      | 'save'
-      | 'delete'
-      | 'createQueryBuilder'
+      'findOne' | 'create' | 'save' | 'delete' | 'createQueryBuilder'
     >
   >;
 
-  const record = (overrides: Partial<IdempotencyRecord> = {}) =>
-    ({
-      id: 'record-id',
-      key: 'key-1',
-      method: 'POST',
-      route: '/grants/:id',
-      requestHash: 'hash-1',
-      status: IdempotencyRecordStatus.COMPLETED,
-      responseStatus: 201,
-      responseBody: { ok: true },
-      leaseExpiresAt: new Date(Date.now() + 60_000),
-      expiresAt: new Date(Date.now() + 86_400_000),
-      completedAt: new Date(),
-      createdAt: new Date(),
-      ...overrides,
-    }) as IdempotencyRecord;
+  const record = (overrides: Partial<IdempotencyRecord> = {}) => ({
+    id: 'record-id',
+    key: 'key-1',
+    method: 'POST',
+    route: '/grants/:id',
+    requestHash: 'hash-1',
+    status: IdempotencyRecordStatus.COMPLETED,
+    responseStatus: 201,
+    responseBody: { ok: true },
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+    expiresAt: new Date(Date.now() + 86_400_000),
+    completedAt: new Date(),
+    createdAt: new Date(),
+    ...overrides,
+  });
 
   beforeEach(async () => {
     jest.clearAllMocks();
